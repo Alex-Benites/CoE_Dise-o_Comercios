@@ -1,0 +1,71 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl) var(--space-lg);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  background: var(--bg-card);
+  border: 2px solid transparent;
+  transition: all var(--transition-smooth);
+  min-width: 160px;
+}
+
+.designer:hover {
+  border-color: var(--accent-secondary);
+  box-shadow: var(--glow-cyan);
+}
+
+.leader:hover {
+  border-color: var(--accent-primary);
+  box-shadow: var(--glow-red);
+}
+
+.avatarContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar {
+  font-size: 3.5rem;
+  z-index: 1;
+}
+
+.glow {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity var(--transition-smooth);
+}
+
+.designer .glow {
+  background: radial-gradient(circle, rgba(0, 212, 255, 0.3) 0%, transparent 70%);
+}
+
+.leader .glow {
+  background: radial-gradient(circle, rgba(229, 9, 20, 0.3) 0%, transparent 70%);
+}
+
+.card:hover .glow {
+  opacity: 1;
+}
+
+.name {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.role {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
