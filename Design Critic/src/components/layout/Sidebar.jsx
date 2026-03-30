@@ -4,7 +4,7 @@ import styles from './Sidebar.module.css';
 
 const leaderLinks = [
   { to: '/dashboard', icon: '📊', label: 'Dashboard' },
-  { to: '/sessions', icon: '🎯', label: 'Sesiones' },
+  { to: '/sessions', icon: '🎯', label: 'Sesiones', end: true },
   { to: '/sessions/new', icon: '➕', label: 'Nueva Sesión' },
 ];
 
@@ -29,6 +29,7 @@ export default function Sidebar() {
           <NavLink
             key={link.to}
             to={link.to}
+            end={link.end}
             className={({ isActive }) =>
               `${styles.link} ${isActive ? styles.active : ''}`
             }

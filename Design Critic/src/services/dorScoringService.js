@@ -1,8 +1,45 @@
 import { DOR_RULES, DOR_CATEGORIES, getRulesByCategory } from '../utils/dorKeywords';
 
 /**
+ * ============================================================
+ * MOTOR DE SCORING DoR (Definition of Ready)
+ * ============================================================
+ *
+ * Este servicio analiza el feedback textual contra 23 reglas del DoR
+ * para determinar automaticamente la "readiness" de un diseno.
+ *
+ * COMO FUNCIONA EL CHECKLIST:
+ * Cada item del checklist se marca como:
+ *   - ✅ pass     → La categoria tiene feedback pero SIN keywords negativas detectadas
+ *   - ❌ fail     → Se detecto una keyword negativa en el texto del feedback
+ *   - ⚠️ unreviewed → No hay feedback en esa categoria (sin evaluar)
+ *
+ * DETECCION POR KEYWORDS:
+ * El sistema combina el comentario + subcategoria del feedback y busca
+ * coincidencias contra las keywords definidas en dorKeywords.js.
+ *
+ * Ejemplos de deteccion:
+ *   - "error", "estado de error" → problema en estados de error (ux_error_state)
+ *   - "confuso", "no se entiende" → problema de claridad (content_clarity)
+ *   - "navegacion confusa", "perdido" → problema de navegacion (ux_navigation)
+ *   - "inconsistente", "desalineado" → problema visual (ui_spacing, ui_consistency)
+ *   - "placeholder", "lorem ipsum" → contenido incompleto (content_complete)
+ *
+ * CALCULO DEL SCORE:
+ *   score = (items pass / items revisados) * 100
+ *   coverage = (items revisados / 23 items totales) * 100
+ *   Items "unreviewed" NO afectan el score, pero SI la cobertura.
+ *
+ * ============================================================
+ */
+
+/**
  * Analyzes feedback text against DoR keyword rules.
  * Returns per-item status and scores.
+ *
+ * Paso 1: Inicializa 23 reglas como 'unreviewed'
+ * Paso 2: Por cada feedback, busca keywords negativas en texto
+ * Paso 3: Si hay feedback en categoria sin keywords negativas → 'pass'
  */
 export function scoreFeedback(feedbackItems) {
   const results = {};

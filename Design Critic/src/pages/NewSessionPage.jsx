@@ -16,7 +16,6 @@ export default function NewSessionPage() {
   const designerList = designers.filter(d => d.role === 'designer');
 
   const [title, setTitle] = useState('');
-  const [project, setProject] = useState('');
   const [selectedPresenters, setSelectedPresenters] = useState([]);
   const [errors, setErrors] = useState({});
 
@@ -41,7 +40,6 @@ export default function NewSessionPage() {
 
     const session = await addSession({
       title: title.trim(),
-      project: project.trim(),
       presenters: selectedPresenters.map(p => ({
         id: p.id,
         name: p.name,
@@ -76,16 +74,6 @@ export default function NewSessionPage() {
             className={errors.title ? styles.inputError : ''}
           />
           {errors.title && <span className={styles.error}>{errors.title}</span>}
-        </div>
-
-        <div className={styles.field}>
-          <label className={styles.label}>Proyecto</label>
-          <input
-            type="text"
-            value={project}
-            onChange={e => setProject(e.target.value)}
-            placeholder="Ej: App Móvil v2"
-          />
         </div>
 
         <div className={styles.field}>

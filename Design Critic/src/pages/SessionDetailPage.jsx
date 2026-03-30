@@ -24,7 +24,7 @@ export default function SessionDetailPage() {
   const { addToast } = useToast();
 
   const session = sessions.find(s => s.id === id);
-  const feedback = getSessionFeedback(id);
+  const allSessionFeedback = getSessionFeedback(id);
 
   const [selectedPresenter, setSelectedPresenter] = useState(null);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
@@ -33,12 +33,48 @@ export default function SessionDetailPage() {
   const [figmaPresenter, setFigmaPresenter] = useState(null);
   const [activeTab, setActiveTab] = useState('feedback');
 
-  // DoR scoring
+  // Determine user's role in this session
+  const isPresenter = session?.presenters?.some(p => p.id === currentUser.id);
+  const isEvaluator = !isPresenter && !isLeader;
+
+  /*
+   * VISIBILITY RULES:
+   * - Leader: sees ALL feedback and ALL DoR scores
+   * - Presenter: sees feedback RECEIVED (from all evaluators to them) + feedback they GAVE to others + their OWN DoR score only
+   * - Evaluator (not presenting): sees ONLY their own feedback given, NO DoR scores
+   */
+  const visibleFeedback = useMemo(() => {
+    if (isLeader) return allSessionFeedback;
+    if (isPresenter) {
+      // Feedback received (evaluated = me) + feedback I gave (evaluator = me)
+      return allSessionFeedback.filter(
+        f => f.evaluatedId === currentUser.id || f.evaluatorId === currentUser.id
+      );
+    }
+    // Evaluator: only their own feedback given
+    return allSessionFeedback.filter(f => f.evaluatorId === currentUser.id);
+  }, [allSessionFeedback, isLeader, isPresenter, currentUser.id]);
+
+  // Split feedback for presenters into received vs given
+  const feedbackReceived = useMemo(() => {
+    if (!isPresenter) return [];
+    return allSessionFeedback.filter(f => f.evaluatedId === currentUser.id);
+  }, [allSessionFeedback, isPresenter, currentUser.id]);
+
+  const feedbackGiven = useMemo(() => {
+    return allSessionFeedback.filter(f => f.evaluatorId === currentUser.id);
+  }, [allSessionFeedback, currentUser.id]);
+
+  // DoR scoring - only for leader (any presenter) or presenter (own only)
+  const canViewDoR = isLeader || isPresenter;
+
   const dorResults = useMemo(() => {
-    if (!selectedPresenter) return null;
-    const presenterFeedback = feedback.filter(f => f.evaluatedId === selectedPresenter.id);
+    if (!canViewDoR || !selectedPresenter) return null;
+    // Presenters can only see their OWN DoR score
+    if (isPresenter && selectedPresenter.id !== currentUser.id) return null;
+    const presenterFeedback = allSessionFeedback.filter(f => f.evaluatedId === selectedPresenter.id);
     return scoreFeedback(presenterFeedback);
-  }, [feedback, selectedPresenter]);
+  }, [allSessionFeedback, selectedPresenter, canViewDoR, isPresenter, currentUser.id]);
 
   const overallScore = useMemo(() => {
     if (!dorResults) return null;
@@ -55,10 +91,17 @@ export default function SessionDetailPage() {
     return getRecommendations(dorResults);
   }, [dorResults]);
 
+  // Presenters available for DoR selection
+  const dorPresenters = useMemo(() => {
+    if (isLeader) return session?.presenters || [];
+    if (isPresenter) return session?.presenters?.filter(p => p.id === currentUser.id) || [];
+    return [];
+  }, [session, isLeader, isPresenter, currentUser.id]);
+
   if (!session) {
     return (
       <div className={styles.notFound}>
-        <h2>Sesión no encontrada</h2>
+        <h2>Sesion no encontrada</h2>
         <Button variant="secondary" onClick={() => navigate('/sessions')}>
           Volver a sesiones
         </Button>
@@ -73,14 +116,13 @@ export default function SessionDetailPage() {
 
   const handleStartSession = async () => {
     await editSession(id, { status: SESSION_STATUS.IN_PROGRESS });
-    addToast('Sesión iniciada', 'success');
+    addToast('Sesion iniciada', 'success');
   };
 
   const handleCloseSession = async () => {
-    // Calculate final DoR scores for each presenter
     const presenterScores = {};
     for (const presenter of session.presenters) {
-      const pFeedback = feedback.filter(f => f.evaluatedId === presenter.id);
+      const pFeedback = allSessionFeedback.filter(f => f.evaluatedId === presenter.id);
       const results = scoreFeedback(pFeedback);
       const score = getOverallScore(results);
       presenterScores[presenter.id] = score.score;
@@ -96,7 +138,7 @@ export default function SessionDetailPage() {
       dorScore: avgScore,
       presenterScores,
     });
-    addToast('Sesión cerrada. Scores calculados.', 'success');
+    addToast('Sesion cerrada. Scores calculados.', 'success');
   };
 
   const handleAddFigmaLink = async () => {
@@ -121,6 +163,20 @@ export default function SessionDetailPage() {
     setShowFeedbackForm(true);
   };
 
+  // Build tabs based on role
+  const tabs = [];
+  if (isLeader) {
+    tabs.push({ id: 'feedback', label: `Feedback (${visibleFeedback.length})` });
+    tabs.push({ id: 'dor', label: 'DoR Score' });
+  } else if (isPresenter) {
+    tabs.push({ id: 'received', label: `Feedback recibido (${feedbackReceived.length})` });
+    tabs.push({ id: 'given', label: `Feedback realizado (${feedbackGiven.length})` });
+    tabs.push({ id: 'dor', label: 'Mi DoR Score' });
+  } else {
+    // Evaluator
+    tabs.push({ id: 'given', label: `Mi feedback (${feedbackGiven.length})` });
+  }
+
   return (
     <motion.div
       className={styles.page}
@@ -135,7 +191,6 @@ export default function SessionDetailPage() {
           </button>
           <h1 className={styles.title}>{session.title}</h1>
           <div className={styles.meta}>
-            {session.project && <span className={styles.project}>{session.project}</span>}
             <span className={styles.date}>{formatDate(session.createdAt)}</span>
             <span className={`${styles.status} ${styles[session.status]}`}>
               {session.status === 'open' ? '🟢 Abierta' :
@@ -148,12 +203,12 @@ export default function SessionDetailPage() {
           <div className={styles.headerActions}>
             {session.status === SESSION_STATUS.OPEN && (
               <Button variant="accent" onClick={handleStartSession}>
-                Iniciar Sesión
+                Iniciar Sesion
               </Button>
             )}
             {session.status === SESSION_STATUS.IN_PROGRESS && (
               <Button variant="danger" onClick={handleCloseSession}>
-                Cerrar Sesión
+                Cerrar Sesion
               </Button>
             )}
           </div>
@@ -165,7 +220,7 @@ export default function SessionDetailPage() {
         <h2 className={styles.sectionTitle}>Presentadores</h2>
         <div className={styles.presenterGrid}>
           {session.presenters?.map(presenter => {
-            const presenterFeedback = feedback.filter(f => f.evaluatedId === presenter.id);
+            const presenterFeedbackCount = allSessionFeedback.filter(f => f.evaluatedId === presenter.id).length;
             const isCurrentUser = currentUser.id === presenter.id;
             const canRate = canEvaluate(presenter);
 
@@ -183,7 +238,7 @@ export default function SessionDetailPage() {
                   <span className={styles.presenterAvatar}>{presenter.avatar}</span>
                   <div>
                     <h3 className={styles.presenterName}>{presenter.name}</h3>
-                    {isCurrentUser && <span className={styles.youBadge}>Tú</span>}
+                    {isCurrentUser && <span className={styles.youBadge}>Tu</span>}
                   </div>
                 </div>
 
@@ -213,7 +268,14 @@ export default function SessionDetailPage() {
                 )}
 
                 <div className={styles.feedbackCount}>
-                  {presenterFeedback.length} feedback{presenterFeedback.length !== 1 ? 's' : ''}
+                  {isLeader
+                    ? `${presenterFeedbackCount} feedback${presenterFeedbackCount !== 1 ? 's' : ''}`
+                    : canRate
+                      ? 'Click para evaluar'
+                      : isCurrentUser
+                        ? `${presenterFeedbackCount} feedback${presenterFeedbackCount !== 1 ? 's' : ''} recibidos`
+                        : ''
+                  }
                 </div>
 
                 {canRate && (
@@ -227,30 +289,32 @@ export default function SessionDetailPage() {
 
       {/* Tabs */}
       <div className={styles.tabs}>
-        <button
-          className={`${styles.tab} ${activeTab === 'feedback' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('feedback')}
-        >
-          Feedback ({feedback.length})
-        </button>
-        <button
-          className={`${styles.tab} ${activeTab === 'dor' ? styles.tabActive : ''}`}
-          onClick={() => {
-            setActiveTab('dor');
-            if (!selectedPresenter && session.presenters?.length > 0) {
-              setSelectedPresenter(session.presenters[0]);
-            }
-          }}
-        >
-          DoR Score
-        </button>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`${styles.tab} ${activeTab === tab.id ? styles.tabActive : ''}`}
+            onClick={() => {
+              setActiveTab(tab.id);
+              if (tab.id === 'dor') {
+                if (isPresenter) {
+                  const me = session.presenters?.find(p => p.id === currentUser.id);
+                  if (me) setSelectedPresenter(me);
+                } else if (!selectedPresenter && session.presenters?.length > 0) {
+                  setSelectedPresenter(session.presenters[0]);
+                }
+              }
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'feedback' && (
+      {/* Tab content: All feedback (leader) */}
+      {activeTab === 'feedback' && isLeader && (
         <section className={styles.section}>
           <FeedbackList
-            feedback={feedback}
+            feedback={visibleFeedback}
             presenters={session.presenters}
             selectedPresenter={selectedPresenter}
             onSelectPresenter={setSelectedPresenter}
@@ -258,25 +322,62 @@ export default function SessionDetailPage() {
         </section>
       )}
 
-      {activeTab === 'dor' && selectedPresenter && (
+      {/* Tab content: Feedback received (presenter) */}
+      {activeTab === 'received' && isPresenter && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Feedback que recibiste</h3>
+          <FeedbackList
+            feedback={feedbackReceived}
+            presenters={session.presenters}
+            selectedPresenter={session.presenters?.find(p => p.id === currentUser.id) || null}
+            onSelectPresenter={() => {}}
+          />
+        </section>
+      )}
+
+      {/* Tab content: Feedback given (presenter or evaluator) */}
+      {activeTab === 'given' && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Feedback que realizaste</h3>
+          <FeedbackList
+            feedback={feedbackGiven}
+            presenters={session.presenters}
+            selectedPresenter={null}
+            onSelectPresenter={() => {}}
+          />
+        </section>
+      )}
+
+      {/* Tab content: DoR Score (leader or presenter for own score) */}
+      {activeTab === 'dor' && canViewDoR && (
         <section className={styles.section}>
           {/* Presenter selector for DoR */}
-          <div className={styles.dorPresenterSelect}>
-            {session.presenters?.map(p => (
-              <button
-                key={p.id}
-                className={`${styles.dorPresenterBtn} ${selectedPresenter?.id === p.id ? styles.dorPresenterActive : ''}`}
-                onClick={() => setSelectedPresenter(p)}
-              >
-                {p.avatar} {p.name}
-              </button>
-            ))}
-          </div>
+          {dorPresenters.length > 1 && (
+            <div className={styles.dorPresenterSelect}>
+              {dorPresenters.map(p => (
+                <button
+                  key={p.id}
+                  className={`${styles.dorPresenterBtn} ${selectedPresenter?.id === p.id ? styles.dorPresenterActive : ''}`}
+                  onClick={() => setSelectedPresenter(p)}
+                >
+                  {p.avatar} {p.name}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <div className={styles.dorGrid}>
-            <DoRScoreCard score={overallScore} categoryScores={categoryScores} />
-            <DoRChecklist results={dorResults} recommendations={recommendations} />
-          </div>
+          {selectedPresenter && dorResults ? (
+            <div className={styles.dorGrid}>
+              <DoRScoreCard score={overallScore} categoryScores={categoryScores} />
+              <DoRChecklist results={dorResults} recommendations={recommendations} />
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)' }}>
+              {isPresenter
+                ? 'Selecciona la pestaña para ver tu score DoR'
+                : 'Selecciona un presentador para ver su score DoR'}
+            </p>
+          )}
         </section>
       )}
 

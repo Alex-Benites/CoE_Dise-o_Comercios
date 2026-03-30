@@ -1,6 +1,32 @@
-// DoR keyword mappings based on docs/DoR.md
-// Each rule maps feedback keywords to a specific DoR checklist item
-// negativeImpact: true means the keyword indicates the item FAILS
+// ============================================================
+// DoR KEYWORD MAPPINGS - Mapeo de keywords a items del checklist
+// ============================================================
+//
+// Cada regla tiene:
+//   id: identificador unico de la regla
+//   category: UX | UI | Contenido | Prototipo
+//   label: descripcion legible del item del checklist
+//   keywords: array de palabras/frases que se buscan en el texto del feedback (en minuscula)
+//   negativeImpact: true = si se encuentra la keyword, el item se marca como FAIL
+//
+// COMO SE DETECTAN PROBLEMAS:
+//   El motor combina: comment + subcategory del feedback
+//   Convierte todo a minuscula
+//   Busca cada keyword en el texto combinado
+//
+// Ejemplos de deteccion:
+//   Feedback: "El flujo esta confuso, no se entiende como llegar al checkout"
+//   → Detecta: "confuso" → content_clarity FAIL
+//   → Detecta: "flujo confuso" → ux_flow_complete FAIL (si esta keyword esta definida)
+//
+//   Feedback: "Falta el estado vacio cuando no hay resultados"
+//   → Detecta: "estado vacio" → ux_empty_state FAIL
+//
+// PARA AGREGAR NUEVAS REGLAS:
+//   1. Agregar un nuevo objeto con id unico
+//   2. Definir las keywords mas representativas del problema
+//   3. Agregar la recomendacion correspondiente en dorScoringService.js
+// ============================================================
 
 export const DOR_RULES = {
   // === UX ===

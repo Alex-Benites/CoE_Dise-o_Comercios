@@ -24,21 +24,43 @@ npm run preview
 src/
   context/       → AuthContext (login/roles), DataContext (CRUD de datos)
   pages/         → ProfileSelectPage, SessionListPage, NewSessionPage, SessionDetailPage, DashboardPage
-  components/    → layout/, profile/, session/, feedback/, dor/, dashboard/, common/
+  components/
+    layout/      → AppShell, Sidebar
+    profile/     → ProfileCard
+    session/     → SessionCard
+    feedback/    → FeedbackForm, FeedbackList, FeedbackCard
+    dor/         → DoRScoreCard, DoRChecklist
+    dashboard/   → LeaderGlobalDashboard, LeaderDesignerDashboard, SessionDashboard, DesignerPersonalDashboard
+    common/      → Button, Modal, Toast, EmptyState
   services/      → storageService (facade), localStorageService, googleSheetsService, dorScoringService
   utils/         → constants, dorKeywords, formatters, validators, animations
   styles/        → variables.css (theme tokens), global.css
 ```
 
-## Roles
+## Roles y visibilidad
 
-- **Lider**: crea sesiones, selecciona presentadores, ve metricas del equipo completo, cierra sesiones
-- **Disenador**: ve sesiones activas, evalua a otros (NO a si mismo), ve su propio dashboard y feedback
+### Lider (jefa)
+- Crea sesiones, selecciona presentadores, cierra sesiones
+- Ve TODO: feedback de todos, scores de todos, comparaciones
+- Dashboard global con ranking, alertas inteligentes, drill-down por disenador y por sesion
+
+### Disenador que presenta
+- Ve feedback recibido de TODOS los evaluadores hacia el/ella
+- Ve feedback que el/ella dio a otros (separado en "Feedback recibido" y "Feedback realizado")
+- Ve SOLO SU PROPIO score DoR
+- Dashboard personal con evolucion, breakdown por categoria, issues recurrentes, recomendaciones
+- NO ve ranking de otros, ni scores de otros, ni comparaciones
+
+### Evaluador (no presenta en esa sesion)
+- Solo puede evaluar a quienes presentan
+- Solo puede ver SU PROPIO feedback dado
+- NO puede ver feedback de otros evaluadores
+- NO puede ver score DoR de nadie
 
 ## Flujo de una sesion
 
-1. Lider crea sesion → selecciona presentadores
-2. Presentadores agregan su link de Figma (obligatorio)
+1. Lider crea sesion → selecciona presentadores (solo titulo, sin campo "proyecto")
+2. Presentadores agregan su link de Figma
 3. Disenadores entran y evaluan a otros (no a si mismos)
 4. El sistema calcula el score DoR automaticamente basado en keywords
 5. Lider cierra la sesion → scores finales calculados
@@ -49,13 +71,23 @@ El motor de scoring se basa en `utils/dorKeywords.js` y `services/dorScoringServ
 
 ### Como funciona
 
-1. Cada item del DoR (basado en `docs/DoR.md`) tiene un set de **keywords** asociadas
-2. Cuando se agrega feedback, el texto del comentario y subcategoria se analizan contra esas keywords
-3. Si una keyword negativa se encuentra → el item del checklist se marca como **fail**
-4. Si hay feedback en la categoria pero sin keywords negativas → **pass**
-5. Si no hay feedback en esa categoria → **unreviewed**
+1. Cada item del DoR tiene un set de **keywords** asociadas
+2. Cuando se agrega feedback, el texto del comentario + subcategoria se analizan contra esas keywords
+3. Si una keyword negativa se encuentra → el item del checklist se marca como **fail** (❌)
+4. Si hay feedback en la categoria pero sin keywords negativas → **pass** (✅)
+5. Si no hay feedback en esa categoria → **unreviewed** (⚠️)
 
-### Categorias DoR
+### Deteccion por keywords - Ejemplos
+
+| Texto del feedback | Keyword detectada | Regla afectada |
+|---|---|---|
+| "El flujo esta confuso" | "flujo confuso" | ux_flow_complete → FAIL |
+| "Falta el estado vacio" | "estado vacio" | ux_empty_state → FAIL |
+| "Navegacion confusa, no se donde ir" | "navegacion confusa" | ux_navigation → FAIL |
+| "Placeholder en el titulo" | "placeholder" | content_complete → FAIL |
+| "Inconsistencia visual en botones" | "inconsistencia visual" | ui_consistency → FAIL |
+
+### Categorias DoR (23 items total)
 
 - **UX** (8 items): flujo completo, navegacion, estados (vacio, error, loading, exito), edge cases
 - **UI** (7 items): componentes existentes, tipografia, espaciado, consistencia, estados de componentes
@@ -74,7 +106,6 @@ Editar `src/utils/dorKeywords.js`:
 
 ```javascript
 export const DOR_RULES = {
-  // Agregar una nueva regla:
   mi_nueva_regla: {
     id: 'mi_nueva_regla',
     category: 'UX',              // UX | UI | Contenido | Prototipo
@@ -86,6 +117,46 @@ export const DOR_RULES = {
 ```
 
 Las recomendaciones automaticas se definen en `dorScoringService.js` funcion `getRecommendationAction()`.
+
+## Dashboards
+
+### Dashboard Global (Lider)
+Componente: `LeaderGlobalDashboard.jsx`
+- KPIs: total sesiones, feedback promedio por sesion, score DoR promedio, issues recurrentes
+- Grafica de evolucion del score del equipo por sesion
+- Distribucion de feedback por categoria (pie chart)
+- Ranking de disenadores con score, mejora y barra visual (clickable → drill-down)
+- Issues recurrentes del equipo
+- Alertas inteligentes (no mejora en 3+ sesiones, score bajo, mejora rapida)
+- Historial de sesiones cerradas (clickable → drill-down a sesion)
+
+### Dashboard por Disenador (Lider, drill-down)
+Componente: `LeaderDesignerDashboard.jsx`
+- Evolucion del score por sesion (grafica)
+- Breakdown por categoria (UX, UI, Contenido, Prototipo)
+- Fortalezas detectadas (categorias con score >= 70%)
+- Issues recurrentes personales
+- Insights automaticos (mejoro en X, bajo en Y)
+
+### Dashboard por Sesion (Lider, drill-down)
+Componente: `SessionDashboard.jsx`
+- Resumen: fecha, presentadores, evaluadores
+- Score por disenador en esa sesion (bar chart)
+- Breakdown por categoria por disenador
+- Issues detectados en esa sesion
+- Feedback mas repetido (por subcategoria)
+- Recomendaciones generadas
+
+### Dashboard Personal (Disenador)
+Componente: `DesignerPersonalDashboard.jsx`
+- Mi rendimiento: promedio general + grafica de evolucion
+- Breakdown personal por categoria
+- Insights automaticos
+- Issues recurrentes personales
+- Recomendaciones
+- Historial de sesiones (expandible con detalle: feedback recibido, score, problemas)
+
+**Restriccion**: disenadores NO ven ranking, scores de otros, ni comparaciones.
 
 ## Conexion a Google Sheets
 
@@ -105,7 +176,7 @@ Las recomendaciones automaticas se definen en `dorScoringService.js` funcion `ge
 
 ### Estructura del Google Sheet
 
-**Hoja Sessions**: sessionId, title, project, status, createdAt, closedAt, dorScore, createdBy, presenters (JSON)
+**Hoja Sessions**: sessionId, title, status, createdAt, closedAt, dorScore, createdBy, presenters (JSON)
 
 **Hoja Feedback**: feedbackId, sessionId, evaluatedId, evaluatorId, category, subcategory, severity, comment, createdAt
 
@@ -127,14 +198,3 @@ El script debe exponer `doPost(e)` que parsea `JSON.parse(e.postData.contents)` 
 - CSS Modules + CSS custom properties (dark theme)
 - localStorage como storage por defecto
 - Google Sheets como storage opcional
-
-## Issues recurrentes
-
-El sistema detecta problemas que se repiten en multiples sesiones para un disenador. Se muestran en el dashboard con la frecuencia y las sesiones afectadas.
-
-## Insights automaticos
-
-Compara la sesion actual vs la anterior para generar mensajes como:
-- "Mejoraste tu score DoR de 60% a 80%"
-- "Tu score DoR bajo de 80% a 60%"
-- "Estados ha sido un problema en 3 sesiones consecutivas"
